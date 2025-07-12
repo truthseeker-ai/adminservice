@@ -1,4 +1,5 @@
 package com.hospital.adminservice.dto;
+
 import lombok.Data;
 import java.time.LocalDate;
 
@@ -10,6 +11,4 @@ public class AdminAppointmentDTO {
     private LocalDate appointmentDate;
     private String appointmentSlot;
     private String status;
-    private String patientName;
-    private String doctorName;
 }

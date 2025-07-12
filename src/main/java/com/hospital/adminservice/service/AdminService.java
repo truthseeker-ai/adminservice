@@ -15,95 +15,74 @@ import java.util.stream.Collectors;
 public class AdminService {
     private final RestTemplate rest;
 
-    @Value("${doctor.service.url:http://localhost:8082}")
-    private String doctorUrl;
-
-    @Value("${patient.service.url:http://localhost:8081}")
-    private String patientUrl;
-
-    @Value("${appointment.service.url:http://localhost:8083}")
-    private String appointmentUrl;
-
-    public List<AdminDoctorDTO> getAllDoctors() {
-        AdminDoctorDTO[] arr = rest.getForObject(doctorUrl + "/api/doctors", AdminDoctorDTO[].class);
-        return Arrays.asList(arr != null ? arr : new AdminDoctorDTO[0]);
-    }
-
-    public List<AdminPatientDTO> getAllPatients() {
-        AdminPatientDTO[] arr = rest.getForObject(patientUrl + "/api/patients", AdminPatientDTO[].class);
-        return Arrays.asList(arr != null ? arr : new AdminPatientDTO[0]);
-    }
-
-    public List<AdminAppointmentDTO> getAllAppointments() {
-        AdminAppointmentDTO[] arr = rest.getForObject(appointmentUrl + "/api/appointments", AdminAppointmentDTO[].class);
-        return enrichAppointments(arr);
-    }
-
-    public List<AdminAppointmentDTO> getAppointmentsByStatus(String status) {
-        AdminAppointmentDTO[] arr = rest.getForObject(
-                appointmentUrl + "/api/appointments/status/" + status,
-                AdminAppointmentDTO[].class);
-        return enrichAppointments(arr);
-    }
-
-    public List<AdminSlotDTO> getAllSlots() {
-        AdminSlotDTO[] arr = rest.getForObject(doctorUrl + "/api/doctors/slotsAll", AdminSlotDTO[].class);
-        return enrichSlots(arr);
-    }
-
-    public List<AdminSlotDTO> getSlotsByDoctor(Long docId) {
-        AdminSlotDTO[] arr = rest.getForObject(
-                doctorUrl + "/api/doctors/" + docId + "/slots",
-                AdminSlotDTO[].class);
-        return enrichSlots(arr);
-    }
+    @Value("${doctor.service.url}")
+    private String docUrl;
+    @Value("${patient.service.url}")
+    private String patUrl;
+    @Value("${appointment.service.url}")
+    private String apptUrl;
 
     public DashboardStatsDTO getDashboardStats() {
-        DashboardStatsDTO stats = new DashboardStatsDTO();
-        List<AdminDoctorDTO> docs = getAllDoctors();
-        List<AdminPatientDTO> pats = getAllPatients();
-        List<AdminAppointmentDTO> appts = getAllAppointments();
-        List<AdminSlotDTO> slots = getAllSlots();
+        List<AdminDoctorDTO> doctors = getAllDoctors();
+        List<AdminPatientDTO> patients = getAllPatients();
+        List<AdminAppointmentDTO> appointments = getAllAppointments();
+        List<AdminSlotDTO> allSlots = getAllSlots();
 
-        stats.setTotalDoctors(docs.size());
-        stats.setTotalPatients(pats.size());
-        stats.setTotalAppointments(appts.size());
-        stats.setPendingAppointments(appts.stream()
-                .filter(a -> "PENDING".equals(a.getStatus()))
-                .count());
-        stats.setConfirmedAppointments(appts.stream()
-                .filter(a -> "CONFIRMED".equals(a.getStatus()))
-                .count());
-        stats.setAvailableSlots(slots.stream()
-                .filter(AdminSlotDTO::getAvailable)
-                .count());
+        long pendingAppointments = appointments.stream().filter(a -> "PENDING".equalsIgnoreCase(a.getStatus())).count();
+        long confirmedAppointments = appointments.stream().filter(a -> "CONFIRMED".equalsIgnoreCase(a.getStatus())).count();
+        long availableSlots = allSlots.stream().filter(AdminSlotDTO::getAvailable).count();
+
+        DashboardStatsDTO stats = new DashboardStatsDTO();
+        stats.setTotalDoctors(doctors.size());
+        stats.setTotalPatients(patients.size());
+        stats.setTotalAppointments(appointments.size());
+        stats.setPendingAppointments(pendingAppointments);
+        stats.setConfirmedAppointments(confirmedAppointments);
+        stats.setAvailableSlots(availableSlots);
         return stats;
     }
 
-    private List<AdminAppointmentDTO> enrichAppointments(AdminAppointmentDTO[] arr) {
-        if (arr == null) return List.of();
-        var docs = getAllDoctors();
-        var pats = getAllPatients();
-        return Arrays.stream(arr).peek(a -> {
-            docs.stream()
-                    .filter(d -> d.getId().equals(a.getDoctorId()))
-                    .findFirst()
-                    .ifPresent(d -> a.setDoctorName(d.getFirstName() + " " + d.getLastName()));
-            pats.stream()
-                    .filter(p -> p.getId().equals(a.getPatientId()))
-                    .findFirst()
-                    .ifPresent(p -> a.setPatientName(p.getFirstName() + " " + p.getLastName()));
-        }).collect(Collectors.toList());
+    public List<AdminDoctorDTO> getAllDoctors() {
+        AdminDoctorDTO[] arr = rest.getForObject(docUrl + "/api/doctors", AdminDoctorDTO[].class);
+        return Arrays.asList(arr != null ? arr : new AdminDoctorDTO[0]);
     }
 
-    private List<AdminSlotDTO> enrichSlots(AdminSlotDTO[] arr) {
-        if (arr == null) return List.of();
-        var docs = getAllDoctors();
-        return Arrays.stream(arr).peek(s -> {
-            docs.stream()
-                    .filter(d -> d.getId().equals(s.getDoctorId()))
-                    .findFirst()
-                    .ifPresent(d -> s.setDoctorName(d.getFirstName() + " " + d.getLastName()));
-        }).collect(Collectors.toList());
+    public void deleteDoctor(Long id) {
+        rest.delete(docUrl + "/api/doctors/{id}", id);
+    }
+
+    public List<AdminPatientDTO> getAllPatients() {
+        AdminPatientDTO[] arr = rest.getForObject(patUrl + "/api/patients", AdminPatientDTO[].class);
+        return Arrays.asList(arr != null ? arr : new AdminPatientDTO[0]);
+    }
+
+    public void deletePatient(Long id) {
+        rest.delete(patUrl + "/api/patients/{id}", id);
+    }
+
+    public List<AdminSlotDTO> getAllSlots() {
+        return getAllDoctors().stream()
+                .map(doctor -> getSlotsForDoctor(doctor.getId()))
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+    }
+
+    public List<AdminSlotDTO> getSlotsForDoctor(Long doctorId) {
+        String url = docUrl + "/api/doctors/" + doctorId + "/slots";
+        AdminSlotDTO[] arr = rest.getForObject(url, AdminSlotDTO[].class);
+        return Arrays.asList(arr != null ? arr : new AdminSlotDTO[0]);
+    }
+
+    public void deleteSlot(Long doctorId, Long slotId) {
+        rest.delete(docUrl + "/api/doctors/{d}/slots/{s}", doctorId, slotId);
+    }
+
+    public List<AdminAppointmentDTO> getAllAppointments() {
+        AdminAppointmentDTO[] arr = rest.getForObject(apptUrl + "/api/appointments", AdminAppointmentDTO[].class);
+        return Arrays.asList(arr != null ? arr : new AdminAppointmentDTO[0]);
+    }
+
+    public void deleteAppointment(Long id) {
+        rest.delete(apptUrl + "/api/appointments/{id}", id);
     }
 }

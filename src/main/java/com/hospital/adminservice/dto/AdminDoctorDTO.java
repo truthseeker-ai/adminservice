@@ -1,4 +1,5 @@
 package com.hospital.adminservice.dto;
+
 import lombok.Data;
 
 @Data
@@ -10,5 +11,4 @@ public class AdminDoctorDTO {
     private String phone;
     private String specialization;
     private Integer yearsOfExperience;
-    private int appointmentCount;
 }
